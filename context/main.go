@@ -22,20 +22,37 @@ func main() {
 	fmt.Println("time is:", time.Since(now))
 }
 
-func fetchUserData(ctx context.Context, userID int) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, time.Microsecond*200)
-	defer cancel()
+type Response struct {
+	value int
+	err   error
+}
 
-	val, err := fetchThirdPartyStuffWhichCanBeSlow()
-	if err != nil {
-		return 0, err
+func fetchUserData(ctx context.Context, userID int) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, time.Millisecond*200)
+	defer cancel()
+	respch := make(chan Response)
+
+	go func() {
+		val, err := fetchThirdPartyStuffWhichCanBeSlow()
+		respch <- Response{
+			value: val,
+			err:   err,
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return 0, fmt.Errorf("fetching data took to long")
+		case resp := <-respch:
+			return resp.value, resp.err
+		}
 	}
 
-	return val, nil
 }
 
 func fetchThirdPartyStuffWhichCanBeSlow() (int, error) {
-	time.Sleep(time.Millisecond * 500)
+	time.Sleep(time.Millisecond * 150)
 
 	return 666, nil
 }
